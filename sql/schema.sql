@@ -26,8 +26,9 @@ CREATE TABLE `icons` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `user_id` bigint NOT NULL,
   `image` longblob NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `userid` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=349 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -43,8 +44,9 @@ CREATE TABLE `livecomment_reports` (
   `livestream_id` bigint NOT NULL,
   `livecomment_id` bigint NOT NULL,
   `created_at` bigint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `livecomment_reports` (`livecomment_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -61,8 +63,11 @@ CREATE TABLE `livecomments` (
   `comment` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `tip` bigint NOT NULL DEFAULT '0',
   `created_at` bigint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1002 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `livestreamidcreated` (`livestream_id`,`created_at`),
+  KEY `live` (`livestream_id`),
+  KEY `user` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1472 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -76,8 +81,9 @@ CREATE TABLE `livestream_tags` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `livestream_id` bigint NOT NULL,
   `tag_id` bigint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=10967 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `livestream_id` (`livestream_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=11699 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -92,8 +98,9 @@ CREATE TABLE `livestream_viewers_history` (
   `user_id` bigint NOT NULL,
   `livestream_id` bigint NOT NULL,
   `created_at` bigint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `userlivestreamid` (`user_id`,`livestream_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -112,8 +119,9 @@ CREATE TABLE `livestreams` (
   `thumbnail_url` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `start_at` bigint NOT NULL,
   `end_at` bigint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7496 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=7658 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -130,8 +138,9 @@ CREATE TABLE `ng_words` (
   `word` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `created_at` bigint NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `ng_words_word` (`word`)
-) ENGINE=InnoDB AUTO_INCREMENT=14338 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  KEY `ng_words_word` (`word`),
+  KEY `userlivestreamid` (`user_id`,`livestream_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=14368 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -147,8 +156,9 @@ CREATE TABLE `reactions` (
   `livestream_id` bigint NOT NULL,
   `emoji_name` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `created_at` bigint NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1002 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `livestreamidcreated` (`livestream_id`,`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=1450 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -163,7 +173,8 @@ CREATE TABLE `reservation_slots` (
   `slot` bigint NOT NULL,
   `start_at` bigint NOT NULL,
   `end_at` bigint NOT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `startend` (`start_at`,`end_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=8760 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -193,8 +204,9 @@ CREATE TABLE `themes` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `user_id` bigint NOT NULL,
   `dark_mode` tinyint(1) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1001 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  PRIMARY KEY (`id`),
+  KEY `userid` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1342 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -212,7 +224,7 @@ CREATE TABLE `users` (
   `description` text COLLATE utf8mb4_bin NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_user_name` (`name`)
-) ENGINE=InnoDB AUTO_INCREMENT=1001 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+) ENGINE=InnoDB AUTO_INCREMENT=1343 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -224,4 +236,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2023-11-25  2:29:34
+-- Dump completed on 2023-11-25  5:14:43
