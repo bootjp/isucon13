@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -180,30 +182,31 @@ func searchLivestreamsHandler(c echo.Context) error {
 	}
 	defer tx.Rollback()
 
-	var livestreamModels []*LivestreamModel
+	var livestreamModels []LivestreamModel
 	if c.QueryParam("tag") != "" {
 		// タグによる取得
-		var tagIDList []int
-		if err := tx.SelectContext(ctx, &tagIDList, "SELECT id FROM tags WHERE name = ?", keyTagName); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get tags: "+err.Error())
-		}
+		query := `
+		SELECT
+			livestreams.id AS id,
+			livestreams.user_id AS user_id,
+			livestreams.title AS title,
+			livestreams.description AS description,
+			livestreams.playlist_url AS playlist_url,
+			livestreams.thumbnail_url AS thumbnail_url,
+			livestreams.start_at AS start_at,
+			livestreams.end_at AS end_at
+		FROM
+			livestreams
+			JOIN livestream_tags ON livestreams.id = livestream_tags.livestream_id
+			JOIN tags ON livestream_tags.tag_id = tags.id
+		WHERE
+			tags.name = ?
+		ORDER BY
+			livestreams.id DESC
+		`
 
-		query, params, err := sqlx.In("SELECT * FROM livestream_tags WHERE tag_id IN (?) ORDER BY livestream_id DESC", tagIDList)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to construct IN query: "+err.Error())
-		}
-		var keyTaggedLivestreams []*LivestreamTagModel
-		if err := tx.SelectContext(ctx, &keyTaggedLivestreams, query, params...); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get keyTaggedLivestreams: "+err.Error())
-		}
-
-		for _, keyTaggedLivestream := range keyTaggedLivestreams {
-			ls := LivestreamModel{}
-			if err := tx.GetContext(ctx, &ls, "SELECT * FROM livestreams WHERE id = ?", keyTaggedLivestream.LivestreamID); err != nil {
-				return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestreams: "+err.Error())
-			}
-
-			livestreamModels = append(livestreamModels, &ls)
+		if err := tx.SelectContext(ctx, &livestreamModels, query, keyTagName); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestreams: "+err.Error())
 		}
 	} else {
 		// 検索条件なし
@@ -221,13 +224,148 @@ func searchLivestreamsHandler(c echo.Context) error {
 		}
 	}
 
-	livestreams := make([]Livestream, len(livestreamModels))
-	for i := range livestreamModels {
-		livestream, err := fillLivestreamResponse(ctx, tx, *livestreamModels[i])
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to fill livestream: "+err.Error())
+	// User の取得
+	userMap := map[int64]User{}
+	{
+		userIDMap := map[int64]struct{}{}
+		for _, livestreamModel := range livestreamModels {
+			userIDMap[livestreamModel.UserID] = struct{}{}
 		}
-		livestreams[i] = livestream
+
+		if len(userIDMap) > 0 {
+			userIDs := make([]int64, 0)
+			for userID := range userIDMap {
+				userIDs = append(userIDs, userID)
+			}
+
+			var userModels []struct {
+				UserID      int64  `db:"user_id"`
+				Name        string `db:"name"`
+				DisplayName string `db:"display_name"`
+				Description string `db:"description"`
+				Password    string `db:"password"`
+				ThemeID     int64  `db:"theme_id"`
+				DarkMode    bool   `db:"dark_mode"`
+				Image       []byte `db:"image"`
+			}
+			// TODO: themes も LEFT JOIN のほうがいいかも？
+			query, params, err := sqlx.In(`
+				SELECT
+					users.id AS user_id,
+					users.name,
+					users.display_name,
+					users.description,
+					themes.id AS theme_id,
+					dark_mode,
+					image
+				FROM
+					users
+					JOIN themes ON users.id = themes.user_id
+					LEFT JOIN icons ON users.id = icons.user_id
+				WHERE
+					users.id IN (?)
+				`,
+				userIDs)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to create users query: "+err.Error())
+			}
+			if err := tx.SelectContext(ctx, &userModels, query, params...); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to get users: "+err.Error())
+			}
+			for _, userModel := range userModels {
+				var image []byte
+				if userModel.Image == nil {
+					image, err = os.ReadFile(fallbackImage)
+					if err != nil {
+						return echo.NewHTTPError(http.StatusInternalServerError, "failed read fallback image: "+err.Error())
+					}
+				} else {
+					image = userModel.Image
+				}
+				iconHash := fmt.Sprintf("%x", sha256.Sum256(image))
+
+				userMap[userModel.UserID] = User{
+					ID:          userModel.UserID,
+					Name:        userModel.Name,
+					DisplayName: userModel.DisplayName,
+					Description: userModel.Description,
+					Theme: Theme{
+						ID:       userModel.ThemeID,
+						DarkMode: userModel.DarkMode,
+					},
+					IconHash: iconHash,
+				}
+			}
+		}
+	}
+
+	// Tags の取得
+	tagsMap := map[int64][]Tag{}
+	{
+		if len(livestreamModels) > 0 {
+			livestreamIDs := make([]int64, len(livestreamModels))
+			for i, livestreamModel := range livestreamModels {
+				livestreamIDs[i] = livestreamModel.ID
+			}
+
+			var tagModels []struct {
+				LivestreamID int64  `db:"livestream_id"`
+				ID           int64  `db:"id"`
+				Name         string `db:"name"`
+			}
+			query, params, err := sqlx.In(`
+				SELECT
+					livestream_tags.livestream_id,
+					tags.id,
+					tags.name
+				FROM
+					tags
+					JOIN livestream_tags ON tags.id = livestream_tags.tag_id
+				WHERE
+					livestream_tags.livestream_id IN (?)
+				ORDER BY
+					livestream_tags.id
+				`,
+				livestreamIDs)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to create tags query: "+err.Error())
+			}
+			if err := tx.SelectContext(ctx, &tagModels, query, params...); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to get tags: "+err.Error())
+			}
+			for _, tagModel := range tagModels {
+				tags, ok := tagsMap[tagModel.LivestreamID]
+				if !ok {
+					tags = make([]Tag, 0)
+				}
+				tags = append(tags, Tag{
+					ID:   tagModel.ID,
+					Name: tagModel.Name,
+				})
+				tagsMap[tagModel.LivestreamID] = tags
+			}
+		}
+	}
+
+	livestreams := make([]Livestream, len(livestreamModels))
+	for i, livestreamModel := range livestreamModels {
+		user := userMap[livestreamModel.UserID]
+		tags, ok := tagsMap[livestreamModel.ID]
+		if !ok {
+			tags = make([]Tag, 0)
+		}
+
+		livestreams[i] = Livestream{
+			ID:           livestreamModel.ID,
+			Owner:        user,
+			Title:        livestreamModel.Title,
+			Tags:         tags,
+			Description:  livestreamModel.Description,
+			PlaylistUrl:  livestreamModel.PlaylistUrl,
+			ThumbnailUrl: livestreamModel.ThumbnailUrl,
+			StartAt:      livestreamModel.StartAt,
+			EndAt:        livestreamModel.EndAt,
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
